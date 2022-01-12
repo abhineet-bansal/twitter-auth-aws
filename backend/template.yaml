@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sangam-backend
+
+Globals:
+  Function:
+    Timeout: 3
+    Runtime: nodejs12.x
+    MemorySize: 128
+    Environment:
+      Variables:
+        REGION_NAME: ap-south-1
+
+Resources:
+
+  # API for the application
+  # TODO: Remove/Modify CORS configuration once web app is hosted on AWS
+  SangamApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET, POST, OPTIONS'"
+        AllowOrigin: "'http://localhost:3000'"
+        AllowHeaders: "'Content-type, x-api-key'"
+        AllowCredentials: true
+
+  # Lambda function to handle Twitter sign-in flow
+  AuthTwitterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: AuthTwitter
+      CodeUri: app/
+      Handler: src/handlers/auth-twitter.handler
+      Runtime: nodejs12.x
+      Policies:
+        - AmazonDynamoDBFullAccess
+      Events:
+        AuthTwitterRequestToken:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SangamApi
+            Path: /auth/request_token
+            Method: POST
+        AuthTwitterAccessToken:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SangamApi
+            Path: /auth/access_token
+            Method: POST
+        AuthTwitterLogout:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SangamApi
+            Path: /auth/logout
+            Method: POST
+
+  # DynamoDB table to store auth data for logged in users: {oauth_token: oauth_token_secret}
+  UserAuthDetailTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: UserAuthDetail
+      PrimaryKey:
+        Name: oauthToken
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+
+Outputs:
+  WebEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage"
+    Value: !Sub "https://${SangamApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
